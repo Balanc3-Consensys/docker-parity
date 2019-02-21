@@ -20,7 +20,9 @@ RUN wget https://releases.parity.io/ethereum/v2.2.9/x86_64-unknown-linux-gnu/par
 RUN chmod +x parity
 
 # Add runit services
-COPY sv /etc/service 
+COPY sv /etc/service
 ARG BUILD_INFO
 LABEL BUILD_INFO=$BUILD_INFO
 
+# Add liveness check script
+COPY livenesscheck /tmp/livenesscheck 
