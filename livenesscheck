@@ -39,13 +39,14 @@ if [[ "$CONNECTED" -lt 0 ]] || [[ "$MAX" -lt 0 ]] || [[ "$CONNECTED" -gt "$MAX" 
 fi
 
 # Check peer ratio
-PARITY_RATIO=$(( $CONNECTED/$MAX ))
-if [[ "$MIN_CONNECTED_PEER_RATIO" -gt "$PARITY_RATIO" ]]; then
+PARITY_RATIO=$(echo $CONNECTED $MAX | awk '{ printf "%.2f \n", $1/$2 }')
+echo "PR=$PARITY_RATIO"
+if echo $MIN_CONNECTED_PEER_RATIO $PARITY_RATIO | awk '{ if ($1>$2) exit 0; else exit 1; }'; then
   err "peer count too low - $PARITY_RATIO/$MAX"
 fi
 
 # Get Current Node number
-CUR_NODE=$(( 16#$(curl -s --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":83}' -H "Content-Type: application/json" -X POST $HOST | jq -r .result | cut -c 3-) )
+CUR_NODE=$(( 16#$(curl -s --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":83}' -H "Content-Type: application/json" -X POST $HOST | jq -r .result | cut -c 3-) ))
 CUR_TIME=$(date +%s)
 
 # Check for irregularities in node number
