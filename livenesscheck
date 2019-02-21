@@ -1,5 +1,20 @@
-#! /bin/bash
+#!/bin/bash
 
+function err {
+    red='\033[0;31m'
+    normal='\033[0m'
+    printf "${red}ERROR: ${1}${normal}\n" >&2
+    exit 1
+}
+
+# Update node status
+function update_node_status {
+  mkdir -p "$PERSISTENT_DIR"
+  cat <<EOF > "$PERSISTENT_DIR/healthcheck.env"
+export LAST_BLOCK=$1
+export BLOCK_TIME=$2
+EOF
+}
 
 MIN_CONNECTED_PEER_RATIO=0.2  # 0.2*25 = 5
 MAX_BLOCK_TIME=300            # max of 5 min
@@ -7,63 +22,49 @@ MAX_BLOCK_TIME=300            # max of 5 min
 # HOST='https://parity-rpc.balanc3.net'
 HOST='http://localhost:8545'
 
-# PERSISTENT_DIR='/data' # Old parity node
-PERSISTENT_DIR='/home/parity/.local' # New parity node
-
+PERSISTENT_DIR='/data' # Old parity node
+# PERSISTENT_DIR='/home/parity/.local' # New parity node
 
 # Fetch peer info and node number
-PEER_INFO=$( curl -s --data '{"method":"parity_netPeers","params":[],"id":1,"jsonrpc":"2.0"}' -H "Content-Type: application/json" -X POST $HOST | jq '.result | { connected: .connected, max: .max }' )
-CONNECTED=$( echo $PEER_INFO | jq '.connected' )
-MAX=$( echo $PEER_INFO | jq '.max' )
+PEER_INFO=$(curl -s --data '{"method":"parity_netPeers","params":[],"id":1,"jsonrpc":"2.0"}' -H "Content-Type: application/json" -X POST $HOST | jq '.result | { connected: .connected, max: .max }')
+CONNECTED=$(echo $PEER_INFO | jq '.connected')
+MAX=$(echo $PEER_INFO | jq '.max')
 
-# Check for irregularities in peef info
-if [ -z "$CONNECTED" ] || [ -z "$MAX" ]; then
-  echo "number of connected peers/max peer amount not found"
-  # exit 1
+# Check for irregularities in peer info
+if [[ -z "$CONNECTED" ]] || [[ -z "$MAX" ]]; then
+  err "number of connected peers/max peer amount not found"
 fi
-if [ "$CONNECTED" -lt 0 ] || [ "$MAX" -lt 0 ] || [ "$CONNECTED" -gt "$MAX" ]; then
-  echo "irregular peer values"
-  # exit 1
+if [[ "$CONNECTED" -lt 0 ]] || [[ "$MAX" -lt 0 ]] || [[ "$CONNECTED" -gt "$MAX" ]]; then
+  err "irregular peer values"
 fi
 
 # Check peer ratio
 PARITY_RATIO=$(( $CONNECTED/$MAX ))
-if (( $(echo "$MIN_CONNECTED_PEER_RATIO > $PARITY_RATIO" | bc -l) )); then
-  echo -ne "peer count too low - "
-  echo "$PARITY_RATIO/$MAX"
-  # exit 1
+if [[ "$MIN_CONNECTED_PEER_RATIO" -gt "$PARITY_RATIO" ]]; then
+  err "peer count too low - $PARITY_RATIO/$MAX"
 fi
 
 # Get Current Node number
-CUR_NODE=$( echo $(( 16#$(curl -s --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":83}' -H "Content-Type: application/json" -X POST $HOST | jq -r .result | cut -c 3-) )) )
+CUR_NODE=$(( 16#$(curl -s --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":83}' -H "Content-Type: application/json" -X POST $HOST | jq -r .result | cut -c 3-) )
 CUR_TIME=$(date +%s)
 
 # Check for irregularities in node number
-if [ -z $CUR_NODE ]; then
-  echo "can't find current node"
-  # exit 1
+if [[ -z $CUR_NODE ]]; then
+  err "can't find current node"
 fi
 
-# Update node status
-function update_node_status {
-  mkdir -p $PERSISTENT_DIR
-  cat <<EOF > $PERSISTENT_DIR/healthcheck.env
-export LAST_BLOCK=$1
-export BLOCK_TIME=$2
-EOF
-}
 # Initialize Block Checking
-if [[ ! -f $PERSISTENT_DIR/healthcheck.env ]]; then
-  echo "Created new healthcheck file"
+if [[ ! -f "$PERSISTENT_DIR/healthcheck.env" ]]; then
+  echo "INFO: Created new healthcheck file"
   update_node_status 0 0
 fi
-source $PERSISTENT_DIR/healthcheck.env
+
+source "$PERSISTENT_DIR/healthcheck.env"
 
 # Check Node liveness
 if [[ $LAST_BLOCK -ne $CUR_NODE ]]; then
-  echo "new node $CUR_NODE"
+  echo "INFO: new node $CUR_NODE"
   update_node_status $CUR_NODE $CUR_TIME
 elif [[ $CUR_TIME-$BLOCK_TIME -ge $MAX_BLOCK_TIME ]]; then
-  echo "Same node ($CUR_NODE) for $MAX_BLOCK_TIME seconds! Restarting... "
-  # exit 1
+  err "Same node ($CUR_NODE) for $MAX_BLOCK_TIME seconds! Restarting..."
 fi
