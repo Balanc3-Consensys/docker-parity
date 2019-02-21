@@ -40,7 +40,6 @@ fi
 
 # Check peer ratio
 PARITY_RATIO=$(echo $CONNECTED $MAX | awk '{ printf "%.2f \n", $1/$2 }')
-echo "PR=$PARITY_RATIO"
 if echo $MIN_CONNECTED_PEER_RATIO $PARITY_RATIO | awk '{ if ($1>$2) exit 0; else exit 1; }'; then
   err "peer count too low - $PARITY_RATIO/$MAX"
 fi
@@ -64,7 +63,6 @@ source "$PERSISTENT_DIR/healthcheck.env"
 
 # Check Node liveness
 if [[ $LAST_BLOCK -ne $CUR_NODE ]]; then
-  echo "INFO: new node $CUR_NODE"
   update_node_status $CUR_NODE $CUR_TIME
 elif [[ $CUR_TIME-$BLOCK_TIME -ge $MAX_BLOCK_TIME ]]; then
   err "Same node ($CUR_NODE) for $MAX_BLOCK_TIME seconds! Restarting..."
